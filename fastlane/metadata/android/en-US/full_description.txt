@@ -1,0 +1,26 @@
+Social Accounts Vault keeps your social media accounts, websites and apps
+organised in one place — on your own device, and nowhere else.
+
+• Bold, colourful cards for every email you use
+• Tap a card and a panel slides up: every Facebook, Instagram and TikTok
+  ID on that email, each with its flag and country — plus any website
+  (site name + URL) and any other app, all under the same email
+• Facebook Pages listed under each Facebook ID (page name + followers)
+• Passwords with show/hide and one-tap copy
+• LOGIN buttons open each platform's login page in your browser; website
+  entries open their site, app entries open the installed app (or a Play
+  Store search when it is not installed)
+• PIN lock with fingerprint unlock — the vault locks itself when it goes
+  to the background
+• Password generator and strength meter, live 2FA codes (TOTP) per entry,
+  duplicate-password warnings, categories, notes and recovery details
+• Backup and restore your data as a JSON file; dark mode
+• Add, edit and delete entries (delete asks twice), filter by Social /
+  Websites / Apps, and search by email, username, country, site, app,
+  notes or category
+
+Privacy first: everything is stored only in a local database on your
+phone. The app asks for no network permission at all — no internet
+access, no contacts, no storage — and sends nothing anywhere. It starts
+empty; you add your own accounts inside the app. The backup file holds
+your passwords in readable form, so keep it private and never share it.
