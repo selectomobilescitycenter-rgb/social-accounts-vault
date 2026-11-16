@@ -137,30 +137,22 @@ fun VaultScreen(
     val selectedEmail = selectedId?.let { id -> emails.find { it.account.id == id } }
 
     /** Stat-tile tap: every tile does something real. Platform tiles filter
-     * the list by kind; count tiles show the list, and with exactly one
-     * email they open that email's detail panel directly. */
+     * the list by kind — tapping the same tile again clears the filter, so
+     * a filter can never silently hide the rest of the vault. Count tiles
+     * show the list, and with exactly one email they open that email's
+     * detail panel directly. */
     fun onStatTap(label: String) {
-        when (label) {
-            "Facebook", "Instagram", "TikTok" -> {
-                kindFilter = "SOCIAL"
-                scope.launch { listState.animateScrollToItem(0) }
-            }
-            "Websites" -> {
-                kindFilter = "WEBSITE"
-                scope.launch { listState.animateScrollToItem(0) }
-            }
-            "Apps" -> {
-                kindFilter = "APP"
-                scope.launch { listState.animateScrollToItem(0) }
-            }
-            else -> { // Emails, Total IDs, FB Pages
-                kindFilter = "All"
-                if (emails.size == 1) {
-                    selectedId = emails.first().account.id
-                } else {
-                    scope.launch { listState.animateScrollToItem(0) }
-                }
-            }
+        val target = when (label) {
+            "Facebook", "Instagram", "TikTok" -> "SOCIAL"
+            "Websites" -> "WEBSITE"
+            "Apps" -> "APP"
+            else -> "All" // Emails, Total IDs, FB Pages
+        }
+        kindFilter = if (kindFilter == target) "All" else target
+        if (kindFilter == "All" && target == "All" && emails.size == 1) {
+            selectedId = emails.first().account.id
+        } else {
+            scope.launch { listState.animateScrollToItem(0) }
         }
     }
 
@@ -201,33 +193,9 @@ fun VaultScreen(
     }
 
     // Kind filter + search (matches site/app names, URLs, notes, category too).
+    // Pure function in Filtering.kt — unit-tested (FilterTest).
     val filtered = remember(query, emails, kindFilter, sortNewest) {
-        val sorted = if (sortNewest) {
-            emails.sortedByDescending { e ->
-                e.ids.maxOfOrNull { it.socialId.createdAt } ?: 0L
-            }
-        } else {
-            emails.sortedBy { it.account.email.lowercase() }
-        }
-        val q = query.trim()
-        sorted.mapNotNull { e ->
-            val ids = e.ids.filter { idw ->
-                val s = idw.socialId
-                val kindOk = kindFilter == "All" || s.kind == kindFilter
-                val searchOk = q.isBlank() ||
-                    e.account.email.contains(q, ignoreCase = true) ||
-                    s.username.contains(q, ignoreCase = true) ||
-                    s.platform.contains(q, ignoreCase = true) ||
-                    s.country.contains(q, ignoreCase = true) ||
-                    s.siteName.contains(q, ignoreCase = true) ||
-                    s.url.contains(q, ignoreCase = true) ||
-                    s.appName.contains(q, ignoreCase = true) ||
-                    s.notes.contains(q, ignoreCase = true) ||
-                    s.category.contains(q, ignoreCase = true)
-                kindOk && searchOk
-            }
-            if (ids.isEmpty()) null else e.copy(ids = ids)
-        }
+        filterEmails(emails, query, kindFilter, sortNewest)
     }
 
     val totalIds = emails.sumOf { it.ids.size }
@@ -248,10 +216,20 @@ fun VaultScreen(
         "Apps" to appCount
     )
 
-    /** Save a form entry (add or edit), then close the form. */
+    /** Save a form entry (add or edit), then close the form.
+     * The saved entry must be visible afterwards: clear any kind filter
+     * and search, so a freshly saved Website/App entry can never stay
+     * hidden behind a stuck "Social" filter. A Toast confirms the save. */
     fun saveEntry(data: EntryFormData) {
+        val currentEditing = editing
+        kindFilter = "All"
+        query = ""
+        val savedName = when (data.kind) {
+            "WEBSITE" -> data.siteName.ifBlank { data.url }
+            "APP" -> data.appName.ifBlank { data.username }
+            else -> data.username.ifBlank { data.platform }
+        }
         scope.launch {
-            val currentEditing = editing
             if (currentEditing != null) {
                 val orig = currentEditing.second.socialId
                 repository.updateEntry(
@@ -293,6 +271,7 @@ fun VaultScreen(
                     pages = data.pages
                 )
             }
+            Toast.makeText(context, "Saved: $savedName", Toast.LENGTH_SHORT).show()
         }
         showAdd = false
         editing = null
@@ -460,6 +439,35 @@ fun VaultScreen(
                 Text(if (sortNewest) "⇅ Newest" else "⇅ A–Z", fontWeight = FontWeight.Black)
             }
         }
+        // When a filter is on, say so in plain words — a hidden filter is
+        // what used to make saved Website/App entries "disappear".
+        if (kindFilter != "All") {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant,
+                        RoundedCornerShape(999.dp)
+                    )
+                    .clickable { kindFilter = "All" }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "🔎 Filter: ${kindLabel(kindFilter)} — sirf ${kindLabel(kindFilter)} dikh raha hai",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp
+                )
+                Text(
+                    "✕ Clear",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
             }
         }
 
@@ -542,7 +550,10 @@ fun VaultScreen(
     // Duplicate-password warning: allow saving anyway.
     pendingEntry?.let { data ->
         AlertDialog(
-            onDismissRequest = { pendingEntry = null },
+            onDismissRequest = {
+                pendingEntry = null
+                Toast.makeText(context, "Not saved", Toast.LENGTH_SHORT).show()
+            },
             title = { Text("Password already used", fontWeight = FontWeight.Black) },
             text = {
                 Text(
@@ -562,7 +573,10 @@ fun VaultScreen(
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { pendingEntry = null }) { Text("Cancel") }
+                OutlinedButton(onClick = {
+                    pendingEntry = null
+                    Toast.makeText(context, "Not saved", Toast.LENGTH_SHORT).show()
+                }) { Text("Don't save") }
             }
         )
     }

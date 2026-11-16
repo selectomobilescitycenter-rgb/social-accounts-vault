@@ -23,12 +23,12 @@ is no recovery, by design.**
 
 ## Built APK (ready to install)
 
-A debug APK was built and verified on 2026-11-14 (v1.4):
+A debug APK was built and verified on 2026-11-16 (v1.5):
 
 - **File:** `app/build/outputs/apk/debug/app-debug.apk`
-- **Size:** 20,320,453 bytes (~19.4 MB)
-- **SHA-256:** `4075e032f8772d7ad5fd4f9637d3f3c32b23fa9bb595e3cf776a10fa64e1eddf`
-- **Package:** `com.socialvault.app`, version 1.4 (versionCode 5)
+- **Size:** 20,320,457 bytes (~19.4 MB)
+- **SHA-256:** `0c588637cc3ab7c555b2fd7248ae12087a8b8d459e53d5698420babb06cb1a68`
+- **Package:** `com.socialvault.app`, version 1.5 (versionCode 6)
 - **SDK:** minSdk 26, targetSdk 34, compileSdk 34
 - **Signed:** with the standard Android debug key (`apksigner verify` passes)
 - **Permissions:** only `USE_BIOMETRIC` (a normal, auto-granted permission
@@ -75,6 +75,22 @@ email card with its "👁 View IDs & Copy Password" button is reachable
 even on a tall phone where the old plain Column starved the inner list of
 height (list got ~0dp, nothing scrolled at all). No database change in
 v1.4 — install it over v1.3 and all accounts survive.
+
+**What's new in v1.5 — saved Apps/Websites "disappearing" fix:** tapping
+a stat chip (e.g. "Facebook") filtered the list to Social only, and that
+filter never cleared — so freshly saved Website/App entries were saved
+correctly but stayed hidden from the list while the stat chips still
+counted them. Now saving any entry clears the filter and the search and
+shows a "Saved: <name>" toast, so what you saved is visible at once;
+tapping the same stat chip again clears the filter; and while a filter is
+on, a banner above the list says so in plain words ("🔎 Filter: Social —
+sirf Social dikh raha hai") with a ✕ Clear button. The duplicate-password
+warning now says "Don't save" instead of "Cancel", and tells you "Not
+saved" if you dismiss it, so an entry is never silently thrown away. The
+filter logic lives in `ui/Filtering.kt` as a pure function, covered by
+`FilterTest` (7 tests) and `RepositoryTest` (5 tests) — run with
+`./gradlew testDebugUnitTest`. No database change in v1.5 — install it
+over v1.4 and all accounts survive.
 
 ## Features (v2)
 
