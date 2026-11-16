@@ -79,4 +79,35 @@ class GroupTest {
         )
         assertEquals(listOf("Facebook", "Snapchat"), groupEntries(ids).map { it.title })
     }
+
+    @Test
+    fun kindFilterAppsShowsOnlyApps() {
+        // The exact bug: with "Apps" active the panel showed Facebook too.
+        val ids = listOf(
+            entry(1, "SOCIAL", platform = "Facebook", username = "fb1"),
+            entry(2, "APP", username = "u", appName = "WhatsApp"),
+            entry(3, "WEBSITE", username = "u", siteName = "Daraz")
+        )
+        val sections = groupEntries(ids, "APP")
+        assertEquals(listOf("Apps"), sections.map { it.title })
+        assertEquals(1, sections[0].entries.size)
+    }
+
+    @Test
+    fun platformFilterFacebookShowsOnlyFacebook() {
+        val ids = listOf(
+            entry(1, "SOCIAL", platform = "Facebook", username = "fb1"),
+            entry(2, "SOCIAL", platform = "Instagram", username = "ig1"),
+            entry(3, "APP", username = "u", appName = "WhatsApp")
+        )
+        val sections = groupEntries(ids, "SOCIAL", "Facebook")
+        assertEquals(listOf("Facebook"), sections.map { it.title })
+        assertEquals(1, sections[0].entries.size)
+    }
+
+    @Test
+    fun noMatchGivesNoSections() {
+        val ids = listOf(entry(1, "SOCIAL", platform = "Facebook", username = "fb1"))
+        assertEquals(emptyList<String>(), groupEntries(ids, "APP").map { it.title })
+    }
 }

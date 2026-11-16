@@ -23,12 +23,12 @@ is no recovery, by design.**
 
 ## Built APK (ready to install)
 
-A debug APK was built and verified on 2026-11-16 (v1.6):
+A debug APK was built and verified on 2026-11-16 (v1.7):
 
 - **File:** `app/build/outputs/apk/debug/app-debug.apk`
-- **Size:** 20,320,457 bytes (~19.4 MB)
-- **SHA-256:** `b279671c20cc27cf147612e0df9486c96efdfc6e660ce6650885c51d30507cf8`
-- **Package:** `com.socialvault.app`, version 1.6 (versionCode 7)
+- **Size:** 20,336,841 bytes (~19.4 MB)
+- **SHA-256:** `5e2e6418f43c20553d1943a3a04e200a0e2722432f7f5a7eb1bdfd0e3cdba909`
+- **Package:** `com.socialvault.app`, version 1.7 (versionCode 8)
 - **SDK:** minSdk 26, targetSdk 34, compileSdk 34
 - **Signed:** with the standard Android debug key (`apksigner verify` passes)
 - **Permissions:** only `USE_BIOMETRIC` (a normal, auto-granted permission
@@ -107,6 +107,18 @@ reads the live entry, so an edit made while it is open shows the new
 values. Grouping is a pure function (`groupEntries` in `ui/Filtering.kt`)
 covered by `GroupTest` (4 tests). No database change in v1.6 — install it
 over v1.5 and all accounts survive.
+
+**What's new in v1.7 — panel honours the filter:** v1.6 grouped the
+panel but the panel ignored the home screen's filter — tapping "Apps"
+still showed the Facebook section too. Now the filter flows everywhere:
+tapping "Apps" shows only apps (list and panel), "Facebook" only
+Facebook, and so on; the panel's header count and countries follow the
+visible entries only. Platform tiles now filter by platform, not just by
+kind, and YouTube got its own stat tile (it already had a section and a
+form choice). Saving still clears the filter so the new entry is visible
+at once. Covered by new tests for the exact scenario (Apps filter → only
+the Apps section; Facebook filter → only the Facebook section). No
+database change in v1.7 — install it over v1.6 and all accounts survive.
 
 ## Features (v2)
 

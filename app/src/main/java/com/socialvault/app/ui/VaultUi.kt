@@ -123,6 +123,8 @@ fun VaultScreen(
     val listState = rememberLazyListState()
     var query by remember { mutableStateOf("") }
     var kindFilter by remember { mutableStateOf("All") } // All | SOCIAL | WEBSITE | APP
+    // Platform filter, set only together with kindFilter="SOCIAL" (e.g. "Facebook").
+    var platformFilter by remember { mutableStateOf<String?>(null) }
     var sortNewest by remember { mutableStateOf(false) }
     var showAdd by remember { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf<Long?>(null) }
@@ -139,19 +141,29 @@ fun VaultScreen(
     val selectedEmail = selectedId?.let { id -> emails.find { it.account.id == id } }
 
     /** Stat-tile tap: every tile does something real. Platform tiles filter
-     * the list by kind — tapping the same tile again clears the filter, so
-     * a filter can never silently hide the rest of the vault. Count tiles
+     * the list by kind AND platform ("Facebook" shows only Facebook, "Apps"
+     * only apps) — tapping the same tile again clears the filter, so a
+     * filter can never silently hide the rest of the vault. Count tiles
      * show the list, and with exactly one email they open that email's
      * detail panel directly. */
     fun onStatTap(label: String) {
-        val target = when (label) {
-            "Facebook", "Instagram", "TikTok" -> "SOCIAL"
-            "Websites" -> "WEBSITE"
-            "Apps" -> "APP"
-            else -> "All" // Emails, Total IDs, FB Pages
+        val (targetKind, targetPlatform) = when (label) {
+            "Facebook" -> "SOCIAL" to "Facebook"
+            "Instagram" -> "SOCIAL" to "Instagram"
+            "TikTok" -> "SOCIAL" to "TikTok"
+            "YouTube" -> "SOCIAL" to "YouTube"
+            "Websites" -> "WEBSITE" to null
+            "Apps" -> "APP" to null
+            else -> "All" to null // Emails, Total IDs, FB Pages
         }
-        kindFilter = if (kindFilter == target) "All" else target
-        if (kindFilter == "All" && target == "All" && emails.size == 1) {
+        if (kindFilter == targetKind && platformFilter == targetPlatform) {
+            kindFilter = "All"
+            platformFilter = null
+        } else {
+            kindFilter = targetKind
+            platformFilter = targetPlatform
+        }
+        if (kindFilter == "All" && targetKind == "All" && emails.size == 1) {
             selectedId = emails.first().account.id
         } else {
             scope.launch { listState.animateScrollToItem(0) }
@@ -196,14 +208,15 @@ fun VaultScreen(
 
     // Kind filter + search (matches site/app names, URLs, notes, category too).
     // Pure function in Filtering.kt — unit-tested (FilterTest).
-    val filtered = remember(query, emails, kindFilter, sortNewest) {
-        filterEmails(emails, query, kindFilter, sortNewest)
+    val filtered = remember(query, emails, kindFilter, platformFilter, sortNewest) {
+        filterEmails(emails, query, kindFilter, sortNewest, platformFilter)
     }
 
     val totalIds = emails.sumOf { it.ids.size }
     val fbCount = emails.sumOf { e -> e.ids.count { it.socialId.platform == "Facebook" } }
     val igCount = emails.sumOf { e -> e.ids.count { it.socialId.platform == "Instagram" } }
     val ttCount = emails.sumOf { e -> e.ids.count { it.socialId.platform == "TikTok" } }
+    val ytCount = emails.sumOf { e -> e.ids.count { it.socialId.platform == "YouTube" } }
     val pagesCount = emails.sumOf { e -> e.ids.sumOf { it.pages.size } }
     val webCount = emails.sumOf { e -> e.ids.count { it.socialId.kind == "WEBSITE" } }
     val appCount = emails.sumOf { e -> e.ids.count { it.socialId.kind == "APP" } }
@@ -213,6 +226,7 @@ fun VaultScreen(
         "Facebook" to fbCount,
         "Instagram" to igCount,
         "TikTok" to ttCount,
+        "YouTube" to ytCount,
         "FB Pages" to pagesCount,
         "Websites" to webCount,
         "Apps" to appCount
@@ -225,6 +239,7 @@ fun VaultScreen(
     fun saveEntry(data: EntryFormData) {
         val currentEditing = editing
         kindFilter = "All"
+        platformFilter = null
         query = ""
         val savedName = when (data.kind) {
             "WEBSITE" -> data.siteName.ifBlank { data.url }
@@ -432,7 +447,7 @@ fun VaultScreen(
                 .forEach { (value, label) ->
                     FilterChip(
                         selected = kindFilter == value,
-                        onClick = { kindFilter = value },
+                        onClick = { kindFilter = value; platformFilter = null },
                         label = { Text(label) }
                     )
                 }
@@ -443,7 +458,8 @@ fun VaultScreen(
         }
         // When a filter is on, say so in plain words — a hidden filter is
         // what used to make saved Website/App entries "disappear".
-        if (kindFilter != "All") {
+        val activeFilterLabel = platformFilter ?: kindLabel(kindFilter)
+        if (kindFilter != "All" || platformFilter != null) {
             Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier
@@ -452,13 +468,13 @@ fun VaultScreen(
                         MaterialTheme.colorScheme.surfaceVariant,
                         RoundedCornerShape(999.dp)
                     )
-                    .clickable { kindFilter = "All" }
+                    .clickable { kindFilter = "All"; platformFilter = null }
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "🔎 Filter: ${kindLabel(kindFilter)} — sirf ${kindLabel(kindFilter)} dikh raha hai",
+                    "🔎 Filter: $activeFilterLabel — sirf $activeFilterLabel dikh raha hai",
                     fontWeight = FontWeight.Black,
                     fontSize = 14.sp
                 )
@@ -535,6 +551,8 @@ fun VaultScreen(
             } else {
                 DetailPanel(
                     email = selectedEmail,
+                    kindFilter = kindFilter,
+                    platformFilter = platformFilter,
                     onSelectEntry = { selectedEntry = it },
                     onDeleteEmail = { deleteEmail = selectedEmail }
                 )
@@ -839,13 +857,21 @@ fun Chip(text: String) {
 @Composable
 fun DetailPanel(
     email: EmailWithIds,
+    kindFilter: String,
+    platformFilter: String?,
     onSelectEntry: (SocialIdWithPages) -> Unit,
     onDeleteEmail: () -> Unit
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    val fbPages = email.ids.sumOf { it.pages.size }
-    val countries = email.ids.map { it.socialId.country }
+    // The panel honours the home screen's filter: with "Apps" active it
+    // shows only apps, with "Facebook" only Facebook — never the rest.
+    val sections = remember(email.ids, kindFilter, platformFilter) {
+        groupEntries(email.ids, kindFilter, platformFilter)
+    }
+    val visibleIds = sections.flatMap { it.entries }
+    val fbPages = visibleIds.sumOf { it.pages.size }
+    val countries = visibleIds.map { it.socialId.country }
         .filter { it.isNotBlank() }
         .distinct()
     Column(
@@ -870,7 +896,7 @@ fun DetailPanel(
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "🎫 ${email.ids.size} entries  •  📄 $fbPages Facebook Pages",
+                        "🎫 ${visibleIds.size} entries  •  📄 $fbPages Facebook Pages",
                         color = Color.White.copy(alpha = 0.92f),
                         fontWeight = FontWeight.Bold
                     )
@@ -924,7 +950,6 @@ fun DetailPanel(
         }
         // Grouped by kind/platform: Apps, Websites, then one section per
         // social platform — never mixed in one list.
-        val sections = remember(email.ids) { groupEntries(email.ids) }
         sections.forEach { section ->
             Spacer(Modifier.height(16.dp))
             Row(

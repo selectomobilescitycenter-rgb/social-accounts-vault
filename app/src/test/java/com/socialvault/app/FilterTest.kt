@@ -108,4 +108,13 @@ class FilterTest {
         assertEquals("ali@gmail.com", out[0].account.email)
         assertEquals("shop@gmail.com", out[1].account.email)
     }
+
+    @Test
+    fun platformFilterShowsOnlyThatPlatform() {
+        // Tapping "Facebook" must not leak Instagram entries into the list.
+        val out = filterEmails(data, "", "SOCIAL", false, "Facebook")
+        assertEquals(1, out.size)
+        assertEquals(1, out[0].ids.size)
+        assertEquals("Facebook", out[0].ids[0].socialId.platform)
+    }
 }

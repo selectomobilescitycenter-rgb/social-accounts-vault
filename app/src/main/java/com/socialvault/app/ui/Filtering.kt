@@ -17,7 +17,8 @@ fun filterEmails(
     emails: List<EmailWithIds>,
     query: String,
     kindFilter: String,
-    sortNewest: Boolean
+    sortNewest: Boolean,
+    platformFilter: String? = null
 ): List<EmailWithIds> {
     val sorted = if (sortNewest) {
         emails.sortedByDescending { e ->
@@ -31,6 +32,7 @@ fun filterEmails(
         val ids = e.ids.filter { idw ->
             val s = idw.socialId
             val kindOk = kindFilter == "All" || s.kind == kindFilter
+            val platformOk = platformFilter == null || s.platform == platformFilter
             val searchOk = q.isBlank() ||
                 e.account.email.contains(q, ignoreCase = true) ||
                 s.username.contains(q, ignoreCase = true) ||
@@ -41,7 +43,7 @@ fun filterEmails(
                 s.appName.contains(q, ignoreCase = true) ||
                 s.notes.contains(q, ignoreCase = true) ||
                 s.category.contains(q, ignoreCase = true)
-            kindOk && searchOk
+            kindOk && platformOk && searchOk
         }
         if (ids.isEmpty()) null else e.copy(ids = ids)
     }
@@ -57,23 +59,34 @@ private val KNOWN_SOCIAL_ORDER = listOf("Facebook", "Instagram", "TikTok", "YouT
  * then one section per social platform — never mixed in one list. Newest
  * first inside each section. Unit-tested (GroupTest).
  */
-fun groupEntries(ids: List<SocialIdWithPages>): List<EntrySection> {
+fun groupEntries(
+    ids: List<SocialIdWithPages>,
+    kindFilter: String = "All",
+    platformFilter: String? = null
+): List<EntrySection> {
+    // Honour the home screen's filter first: with "Apps" active only apps
+    // reach the panel, with "Facebook" only Facebook.
+    val visible = ids.filter { idw ->
+        val s = idw.socialId
+        (kindFilter == "All" || s.kind == kindFilter) &&
+            (platformFilter == null || s.platform == platformFilter)
+    }
     val newestFirst = { list: List<SocialIdWithPages> ->
         list.sortedByDescending { it.socialId.createdAt }
     }
     val sections = mutableListOf<EntrySection>()
-    val apps = ids.filter { it.socialId.kind == "APP" }
+    val apps = visible.filter { it.socialId.kind == "APP" }
     if (apps.isNotEmpty()) sections += EntrySection("Apps", "📱", newestFirst(apps))
-    val sites = ids.filter { it.socialId.kind == "WEBSITE" }
+    val sites = visible.filter { it.socialId.kind == "WEBSITE" }
     if (sites.isNotEmpty()) sections += EntrySection("Websites", "🌐", newestFirst(sites))
-    val social = ids.filter { it.socialId.kind == "SOCIAL" }
+    val social = visible.filter { it.socialId.kind == "SOCIAL" }
         .groupBy { it.socialId.platform.ifBlank { "Social" } }
     val ordered = KNOWN_SOCIAL_ORDER.filter { it in social } +
         (social.keys - KNOWN_SOCIAL_ORDER.toSet()).sorted()
     for (platform in ordered) {
         sections += EntrySection(platform, platformIcon(platform), newestFirst(social.getValue(platform)))
     }
-    val other = ids.filter {
+    val other = visible.filter {
         it.socialId.kind != "APP" && it.socialId.kind != "WEBSITE" && it.socialId.kind != "SOCIAL"
     }
     if (other.isNotEmpty()) sections += EntrySection("Other", "🔐", newestFirst(other))
