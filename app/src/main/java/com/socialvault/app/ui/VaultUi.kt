@@ -126,6 +126,8 @@ fun VaultScreen(
     var sortNewest by remember { mutableStateOf(false) }
     var showAdd by remember { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf<Long?>(null) }
+    // 2nd page inside the panel: the tapped entry's full data.
+    var selectedEntry by remember { mutableStateOf<SocialIdWithPages?>(null) }
     var editing by remember { mutableStateOf<Pair<String, SocialIdWithPages>?>(null) }
     var deleteId by remember { mutableStateOf<Pair<String, SocialIdWithPages>?>(null) }
     var deleteEmail by remember { mutableStateOf<EmailWithIds?>(null) }
@@ -511,19 +513,32 @@ fun VaultScreen(
     }
 
     // Slide-in detail panel (bottom sheet) for the tapped email.
+    // First page: grouped list of just the IDs. Tap one → 2nd page with
+    // that ID's full data. The detail always reads the live entry, so an
+    // edit made while it is open shows the new values.
     if (selectedEmail != null) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
-            onDismissRequest = { selectedId = null },
+            onDismissRequest = { selectedId = null; selectedEntry = null },
             sheetState = sheetState
         ) {
-            DetailPanel(
-                email = selectedEmail,
-                onEditId = { editing = selectedEmail.account.email to it },
-                onDeleteId = { deleteId = selectedEmail.account.email to it },
-                onDeleteEmail = { deleteEmail = selectedEmail },
-                onExternalIntent = onExternalIntent
-            )
+            val liveEntry = selectedEntry?.let { sel ->
+                selectedEmail.ids.find { it.socialId.id == sel.socialId.id }
+            }
+            if (liveEntry != null) {
+                EntryDetail(
+                    idw = liveEntry,
+                    onBack = { selectedEntry = null },
+                    onEdit = { editing = selectedEmail.account.email to liveEntry },
+                    onDelete = { deleteId = selectedEmail.account.email to liveEntry }
+                )
+            } else {
+                DetailPanel(
+                    email = selectedEmail,
+                    onSelectEntry = { selectedEntry = it },
+                    onDeleteEmail = { deleteEmail = selectedEmail }
+                )
+            }
         }
     }
 
@@ -624,6 +639,7 @@ fun VaultScreen(
             onConfirm = {
                 scope.launch { repository.deleteSocialId(idWithPages) }
                 deleteId = null
+                selectedEntry = null
             },
             onDismiss = { deleteId = null }
         )
@@ -636,6 +652,7 @@ fun VaultScreen(
             onConfirm = {
                 scope.launch { repository.deleteEmail(email) }
                 selectedId = null
+                selectedEntry = null
                 deleteEmail = null
             },
             onDismiss = { deleteEmail = null }
@@ -822,10 +839,8 @@ fun Chip(text: String) {
 @Composable
 fun DetailPanel(
     email: EmailWithIds,
-    onEditId: (SocialIdWithPages) -> Unit,
-    onDeleteId: (SocialIdWithPages) -> Unit,
-    onDeleteEmail: () -> Unit,
-    onExternalIntent: () -> Unit
+    onSelectEntry: (SocialIdWithPages) -> Unit,
+    onDeleteEmail: () -> Unit
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -907,14 +922,33 @@ fun DetailPanel(
                 }
             }
         }
-        email.ids.forEach { idw ->
-            Spacer(Modifier.height(12.dp))
-            IdBlock(
-                idw = idw,
-                onEdit = { onEditId(idw) },
-                onDelete = { onDeleteId(idw) },
-                onExternalIntent = onExternalIntent
-            )
+        // Grouped by kind/platform: Apps, Websites, then one section per
+        // social platform — never mixed in one list.
+        val sections = remember(email.ids) { groupEntries(email.ids) }
+        sections.forEach { section ->
+            Spacer(Modifier.height(16.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(section.icon, fontSize = 20.sp)
+                Text(
+                    section.title,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 18.sp
+                )
+                Text(
+                    "(${section.entries.size})",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            section.entries.forEach { idw ->
+                EntryRow(idw = idw, onClick = { onSelectEntry(idw) })
+                Spacer(Modifier.height(8.dp))
+            }
         }
         Spacer(Modifier.height(16.dp))
         Button(
@@ -931,12 +965,79 @@ fun DetailPanel(
     }
 }
 
+// 2nd page: one saved ID's full data with copy options. No "Open" button
+// (removed in v1.6) — the data is here, with Show/Copy and Edit/Delete.
+@Composable
+fun EntryDetail(
+    idw: SocialIdWithPages,
+    onBack: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 32.dp)
+    ) {
+        TextButton(onClick = onBack) {
+            Text("← Back to IDs", fontWeight = FontWeight.Black, fontSize = 16.sp)
+        }
+        Spacer(Modifier.height(4.dp))
+        IdBlock(idw = idw, onEdit = onEdit, onDelete = onDelete)
+    }
+}
+
+/** One saved ID as a compact row: tap it to open its data (2nd page). */
+@Composable
+fun EntryRow(idw: SocialIdWithPages, onClick: () -> Unit) {
+    val id = idw.socialId
+    val subtitle = when (id.kind) {
+        "SOCIAL" -> "Social • ${id.platform}" +
+            (if (id.country.isNotBlank()) " • ${flagFor(id.country)} ${id.country}" else "")
+        "WEBSITE" -> id.url.ifBlank { id.username.ifBlank { "—" } }
+        else -> id.username.ifBlank { id.packageName.ifBlank { "—" } }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(2.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(entryIcon(id), fontSize = 26.sp)
+        Column(Modifier.weight(1f)) {
+            Text(
+                id.displayName(),
+                fontWeight = FontWeight.Black,
+                fontSize = 18.sp,
+                maxLines = 1
+            )
+            Text(
+                subtitle,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+        Text(
+            "›",
+            fontSize = 30.sp,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
 @Composable
 fun IdBlock(
     idw: SocialIdWithPages,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onExternalIntent: () -> Unit
+    onDelete: () -> Unit
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -1070,28 +1171,7 @@ fun IdBlock(
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Button(
-            onClick = {
-                onExternalIntent()
-                if (!openEntry(context, id)) {
-                    Toast.makeText(context, "Nothing to open for this entry", Toast.LENGTH_SHORT).show()
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(999.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = GreenStart,
-                contentColor = Color.White
-            )
-        ) {
-            Text(
-                entryActionLabel(id),
-                fontWeight = FontWeight.Black,
-                fontSize = 18.sp
-            )
-        }
-        Spacer(Modifier.height(8.dp))
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
                 Text("✏️ Edit")
@@ -1188,7 +1268,7 @@ fun LabelValue(label: String, value: String) {
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AccountFormDialog(
     emailText: String?,
@@ -1280,8 +1360,8 @@ fun AccountFormDialog(
                 if (kind == "SOCIAL") {
                     Text("Platform", fontWeight = FontWeight.ExtraBold)
                     Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Facebook", "Instagram", "TikTok").forEach { p ->
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("Facebook", "Instagram", "TikTok", "YouTube").forEach { p ->
                             FilterChip(
                                 selected = platform == p,
                                 onClick = { platform = p },

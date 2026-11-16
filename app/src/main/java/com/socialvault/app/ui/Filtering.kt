@@ -1,6 +1,7 @@
 package com.socialvault.app.ui
 
 import com.socialvault.app.data.EmailWithIds
+import com.socialvault.app.data.SocialIdWithPages
 
 /**
  * Pure list logic for the vault home screen: sort + kind filter + search.
@@ -44,4 +45,37 @@ fun filterEmails(
         }
         if (ids.isEmpty()) null else e.copy(ids = ids)
     }
+}
+
+/** One group on the panel's first page: all IDs of one kind/platform. */
+data class EntrySection(val title: String, val icon: String, val entries: List<SocialIdWithPages>)
+
+private val KNOWN_SOCIAL_ORDER = listOf("Facebook", "Instagram", "TikTok", "YouTube")
+
+/**
+ * Group an email's entries for the panel's first page: Apps, then Websites,
+ * then one section per social platform — never mixed in one list. Newest
+ * first inside each section. Unit-tested (GroupTest).
+ */
+fun groupEntries(ids: List<SocialIdWithPages>): List<EntrySection> {
+    val newestFirst = { list: List<SocialIdWithPages> ->
+        list.sortedByDescending { it.socialId.createdAt }
+    }
+    val sections = mutableListOf<EntrySection>()
+    val apps = ids.filter { it.socialId.kind == "APP" }
+    if (apps.isNotEmpty()) sections += EntrySection("Apps", "📱", newestFirst(apps))
+    val sites = ids.filter { it.socialId.kind == "WEBSITE" }
+    if (sites.isNotEmpty()) sections += EntrySection("Websites", "🌐", newestFirst(sites))
+    val social = ids.filter { it.socialId.kind == "SOCIAL" }
+        .groupBy { it.socialId.platform.ifBlank { "Social" } }
+    val ordered = KNOWN_SOCIAL_ORDER.filter { it in social } +
+        (social.keys - KNOWN_SOCIAL_ORDER.toSet()).sorted()
+    for (platform in ordered) {
+        sections += EntrySection(platform, platformIcon(platform), newestFirst(social.getValue(platform)))
+    }
+    val other = ids.filter {
+        it.socialId.kind != "APP" && it.socialId.kind != "WEBSITE" && it.socialId.kind != "SOCIAL"
+    }
+    if (other.isNotEmpty()) sections += EntrySection("Other", "🔐", newestFirst(other))
+    return sections
 }

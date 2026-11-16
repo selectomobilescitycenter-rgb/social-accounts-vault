@@ -23,12 +23,12 @@ is no recovery, by design.**
 
 ## Built APK (ready to install)
 
-A debug APK was built and verified on 2026-11-16 (v1.5):
+A debug APK was built and verified on 2026-11-16 (v1.6):
 
 - **File:** `app/build/outputs/apk/debug/app-debug.apk`
 - **Size:** 20,320,457 bytes (~19.4 MB)
-- **SHA-256:** `0c588637cc3ab7c555b2fd7248ae12087a8b8d459e53d5698420babb06cb1a68`
-- **Package:** `com.socialvault.app`, version 1.5 (versionCode 6)
+- **SHA-256:** `b279671c20cc27cf147612e0df9486c96efdfc6e660ce6650885c51d30507cf8`
+- **Package:** `com.socialvault.app`, version 1.6 (versionCode 7)
 - **SDK:** minSdk 26, targetSdk 34, compileSdk 34
 - **Signed:** with the standard Android debug key (`apksigner verify` passes)
 - **Permissions:** only `USE_BIOMETRIC` (a normal, auto-granted permission
@@ -91,6 +91,22 @@ filter logic lives in `ui/Filtering.kt` as a pure function, covered by
 `FilterTest` (7 tests) and `RepositoryTest` (5 tests) — run with
 `./gradlew testDebugUnitTest`. No database change in v1.5 — install it
 over v1.4 and all accounts survive.
+
+**What's new in v1.6 — grouped panel, two-page detail, no Open button:**
+the panel used to show every entry's full data (username, password, Open
+button, Edit/Delete) in one long mixed list — apps and IDs all in one
+place. Now the panel's first page shows only the saved IDs, grouped:
+Apps, Websites, then one section per social platform (Facebook,
+Instagram, TikTok, YouTube — YouTube is now a platform choice in the add
+form too), newest first inside each section. Tap any ID → a 2nd page with
+that ID's full data (username, password with Show/Copy, country, pages,
+notes, recovery) with copy-paste options and the same Edit/Delete buttons.
+The green "Open App / Login in Browser" button is removed from the panel
+(the home-screen card's login button is unchanged). The detail always
+reads the live entry, so an edit made while it is open shows the new
+values. Grouping is a pure function (`groupEntries` in `ui/Filtering.kt`)
+covered by `GroupTest` (4 tests). No database change in v1.6 — install it
+over v1.5 and all accounts survive.
 
 ## Features (v2)
 

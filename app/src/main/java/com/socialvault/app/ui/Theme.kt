@@ -76,6 +76,7 @@ fun cardGradient(platform: String): Brush = when (platform) {
     "Instagram" -> Brush.linearGradient(
         listOf(InstagramYellow, InstagramOrange, InstagramPink, InstagramPurple)
     )
+    "YouTube" -> Brush.linearGradient(listOf(Color(0xFFFF0000), Color(0xFFCC0000)))
     else -> Brush.linearGradient(listOf(Color(0xFF222222), Color(0xFF000000)))
 }
 
@@ -115,13 +116,16 @@ fun kindLabel(kind: String): String = when (kind) {
 fun platformIcon(platform: String): String = when (platform) {
     "Facebook" -> "ⓕ"
     "Instagram" -> "📸"
-    else -> "🎵"
+    "TikTok" -> "🎵"
+    "YouTube" -> "▶️"
+    else -> "🔐"
 }
 
 /** Login page opened in the user's own browser. */
 fun loginUrl(platform: String): String = when (platform) {
     "Facebook" -> "https://www.facebook.com/login/"
     "Instagram" -> "https://www.instagram.com/accounts/login/"
+    "YouTube" -> "https://accounts.google.com/"
     else -> "https://www.tiktok.com/login"
 }
 
